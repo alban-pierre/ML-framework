@@ -101,6 +101,9 @@ class Uniform_MAB:
         self.list_next = self.list_next[1:]
         self.n += 1
         self.list_rewards[arm].append(reward)
-        self.mean_rewards[arm] = np.mean(self.list_rewards[arm])
+        if (reward is None):
+            self.mean_rewards[arm] = None
+        elif (self.mean_rewards[arm] is not None):
+            self.mean_rewards[arm] = np.mean(self.list_rewards[arm])
         self.other_data[arm].append(other_data)
         

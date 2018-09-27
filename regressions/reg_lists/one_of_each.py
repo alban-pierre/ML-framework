@@ -22,6 +22,10 @@ regressions = [
     ("Huber Regression", HuberRegressor()),
     ("Kernel Ridge", KernelRidge()),
     ("Gaussian Process Regression", GaussianProcessRegressor()),
-    ("SVR", SVR())
+    ("SVR", SVR()),
+    ("Multi Task Lasso", MultiTaskLasso()),
+    ("Multi Task Lasso CV", MultiTaskLassoCV()),
+    ("Multi Task Elastic Net", MultiTaskElasticNet()),
+    ("Multi Task Elastic Net CV", MultiTaskElasticNetCV())
 
 ]
