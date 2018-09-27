@@ -157,7 +157,7 @@ def get_regressions(n=0):
      - if n is negative, it returns only one regression
      - if n is zero (default value), it returns one regression of each type
      - if n is strictly positive, it returns more regressions (Not implemented yet)
-     - if n is filename, it executes the code inside and returns the contents of variable "regressions"
+     - if n is filename, it executes the code inside and returns the contents of var "regressions"
      - if n is a string, it executes n and returns the contents of variable "regressions"
      - otherwise, it returns an empty list
     ********* Examples *********
@@ -193,7 +193,7 @@ def get_regressions(n=0):
 
 
 
-def run_one_regression(x_train, y_train, reg, error_func=mean_squared_error, x_test=None, y_test=None, verbose=True, show=True, i="", _error_test=None, _run_time=None):
+def run_one_regression(x_train, y_train, reg, error_func=mean_squared_error, x_test=None, y_test=None, verbose=True, show=True, i=""):
     """
     ********* Description *********
     Fit and return the error of one regression
@@ -337,7 +337,7 @@ def run_all_regressions(x_train, y_train, regs=0, error_func=mean_squared_error,
     Try several different regressions, and can show and verbose some of them
     ********* Params *********
     x_train : (np.ndarray(n, dx)) : points
-    x_train : (np.ndarray(n, dy)) : targets
+    y_train : (np.ndarray(n, dy)) : targets
     regs : (int) or (str) or [(sklearn.regression)] : regressions used, with get_regressions syntax
     error_func : (func) = sklearn.mean_squared_error : the error used
     x_test : np.ndarray(m, dx) or (int) or (float) = None : test points, or
@@ -398,7 +398,7 @@ def run_all_regressions(x_train, y_train, regs=0, error_func=mean_squared_error,
         errors = []
         for ic, sho, verb, reg in zip(range(len(show)), show, verbose, regs):
             nbr_ex += 1
-            tr, te, ti = run_one_regression(x_tr, y_tr, reg, error_func, x_te, y_te, verbose=verb, show=sho, i=ic)
+            tr, te, ti = _run_one_regression(x_tr, y_tr, reg, error_func, x_te, y_te, verbose=verb, show=sho, i=ic)
             errors.append({"i":ic, "error_train":tr, "error_test":te, "reg":reg, "time":ti})
     else:
         # In this section we follow the class selection_algo to perform the regressions tests
@@ -410,7 +410,7 @@ def run_all_regressions(x_train, y_train, regs=0, error_func=mean_squared_error,
                 x_tr, x_te, y_tr, y_te = (x_train, x_test, y_train, y_test)
             else:
                 x_tr, x_te, y_tr, y_te = train_test_split(x_train, y_train, test_size=test_size)
-            tr, te, ti = run_one_regression(x_tr, y_tr, regs[arm], error_func, x_te, y_te, verbose[arm], show[arm], i=nbr_ex)
+            tr, te, ti = _run_one_regression(x_tr, y_tr, regs[arm], error_func, x_te, y_te, verbose[arm], show[arm], i=nbr_ex)
             selection_algo.update_reward(te, arm=arm, other_data=(tr, ti))
             arm = selection_algo.next_arm()
             nbr_ex += 1
