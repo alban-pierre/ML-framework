@@ -438,7 +438,8 @@ def run_all_regressions(x_train, y_train, regs=0, error_func=mean_squared_error,
         errors_sorted = [e for e in errors if e["time"] is not None]
         errors_sorted = sorted(errors_sorted, key=sort_key)
         for ic, ss, sho, verb in zip(range(len(final_show)), errors_sorted, final_show, final_verbose):
-            _run_one_regression(x_train, y_train, ss["reg"], error_func, verbose=verb, show=sho, i=ic, _error_test=ss["error_test"], _run_time=ss["time"])
+             if verb or sho:
+                 _run_one_regression(x_train, y_train, ss["reg"], error_func, verbose=verb, show=sho, i=ic, _error_test=ss["error_test"], _run_time=ss["time"])
     return errors
 
 

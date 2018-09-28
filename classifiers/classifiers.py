@@ -450,7 +450,8 @@ def run_all_classifiers(x_train, y_train, clfs=0, x_test=None, y_test=None, sele
         scores_sorted = [e for e in scores if e["time"] is not None]
         scores_sorted = sorted(scores_sorted, key=sort_key)
         for ic, ss, sho, verb in zip(range(len(final_show)), scores_sorted, final_show, final_verbose):
-            _run_one_classifier(x_train, y_train, ss["clf"], verbose=verb, show=sho, i=ic, _score_test=ss["score_test"], _run_time=ss["time"])
+            if verb or sho:
+                _run_one_classifier(x_train, y_train, ss["clf"], verbose=verb, show=sho, i=ic, _score_test=ss["score_test"], _run_time=ss["time"])
     return scores
 
 
