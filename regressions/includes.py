@@ -1,11 +1,44 @@
-from sklearn.base import RegressorMixin
 
-class Empty_Regression(RegressorMixin):
+
+
+class Regression_With_Custom_Kernel:
+    """
+    Class for syntax convenience when defining custom kernels
+    """
+    def __init__(self, reg, kernel):
+        """
+        reg : the scikit learn regression
+        kernel : the custom kernel to use
+        """
+        self.reg = reg
+        self.kernel = kernel
+        self.reg.set_params(kernel="precomputed")
+        
+    def fit(self, x, y, *args, **kargs):
+        mat = self.kernel(x, x)
+        self.x = x
+        #self.reg.set_params(kernel_params=mat)
+        return self.reg.fit(mat, y, *args, **kargs)
+
+    def predict(self, x, *args, **kargs):
+        mat = self.kernel(x, self.x)
+        #self.reg.set_params(kernel_params=mat)
+        return self.reg.predict(mat, *args, **kargs)
+
+
+
+class Empty_Regression:
     """
     Class for defining regressions in case they can't be imported
     """
     def __init__(self, *args, **kargs):
         pass
+
+
+
+from kernels.pykernels.basic import *
+from kernels.pykernels.regular import *
+
 
 
 try:

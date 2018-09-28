@@ -2,4 +2,6 @@
 *.pyc
 */input/
 */output/
-classifiers/pykernels*
+kernels/tests*
+kernels/doc*
+kernels/pykernels/graph/data*

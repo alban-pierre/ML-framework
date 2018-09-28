@@ -1,14 +1,28 @@
-# try:
-#     from pykernels.pykernels.basic import *
-#     from pykernels.pykernels.regular import *
-# except (ZeroDivisionError, ImportError):
-#     from pykernels.basic import *
-#     from pykernels.regular import *
 
 
 
-from .pykernels.pykernels.basic import *
-from .pykernels.pykernels.regular import *
+class Classifier_From_Regression:
+    """
+    Class for defining classifiers from a regression
+    """
+    def __init__(self, reg, threshold=0.5, inversed=False):
+        self.reg = reg
+        self.threshold = threshold
+        self.inversed = inversed
+
+    def fit(self, x, y, *args, **kargs):
+        return self.reg.fit(x, y, *args, **kargs)
+
+    def predict(self, x, *args, **kargs):
+        pred = self.reg.predict(x, *args, **kargs)
+        if self.inversed:
+            return (pred < self.threshold).astype(int)
+        else:
+            return (pred >= self.threshold).astype(int)
+
+    def score(self, x, y, *args, **kargs):
+        return np.mean((self.predict(x, *args, **kargs) == y).astype(int))
+
 
 
 class Empty_Classifier:
@@ -17,6 +31,16 @@ class Empty_Classifier:
     """
     def __init__(self, *args, **kargs):
         pass
+
+
+
+from regressions.includes import *
+
+
+
+from kernels.pykernels.basic import *
+from kernels.pykernels.regular import *
+
 
 
 try:

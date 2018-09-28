@@ -23,8 +23,7 @@ from sklearn.exceptions import DataConversionWarning
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=DataConversionWarning)
-
-
+    
 
 
 def help():
@@ -133,19 +132,24 @@ def show_regression(reg, x, y):
 
 
 
-def _execute_regression_file(s):
+def get_regressions_from(s):
     """
-    Execute a file containing regressions, in python 2 or 3
+    Execute a string or file containing regressions, in python 2 or 3
     It outputs the regressions defined
     """
+    if (s[-3:] == ".py"):
+        with open(s) as f:
+            r = f.read()
+    else:
+        r = s
     if (sys.version_info[0] == 2):
-        exec(s)
+        exec(r)
         return regressions
     else:
         namespace = globals()
-        exec(s, namespace)
+        exec(r, namespace)
         return namespace['regressions']
-    
+
 
 
 def get_regressions(n=0):
@@ -172,18 +176,21 @@ def get_regressions(n=0):
                 regressions = [("Linear Regression", LinearRegression())]
             elif (n == 0):
                 this_file_path = '/'.join(__file__.split('/')[:-1])
-                with open(os.path.join(this_file_path, "reg_lists/one_of_each.py")) as f:
-                    r = f.read()
-                    regressions = _execute_regression_file(r)
+                filename = os.path.join(this_file_path, "reg_lists/one_of_each.py")
+                regressions = get_regressions_from(filename)
+                # with open(os.path.join(this_file_path, "reg_lists/one_of_each.py")) as f:
+                #     r = f.read()
+                #     regressions = _execute_regression_file(r)
             else:
                 regressions = []
         elif isinstance(n, str):
-            if (n[-3:] == ".py"):
-                with open(n) as f:
-                    r = f.read()
-                    regressions = _execute_regression_file(r)
-            else:
-                regressions = _execute_regression_file(n)
+            regressions = get_regressions_from(filename)
+            # if (n[-3:] == ".py"):
+            #     with open(n) as f:
+            #         r = f.read()
+            #         regressions = _execute_regression_file(r)
+            # else:
+            #     regressions = _execute_regression_file(n)
         else:
             regressions = []
     except:
@@ -234,25 +241,34 @@ def _run_one_regression(x_train, y_train, reg, error_func=mean_squared_error, x_
     """
     # We define reg and name etc
     reg, name = _get_reg_attributes(reg)
+    # We separate the train test data if asked of
+    if isinstance(x_test, int):
+        test_size = float(x_test)/x_train.shape[0]
+        x_tr, x_te, y_tr, y_te = train_test_split(x_train, y_train, test_size=test_size)
+    elif isinstance(x_test, float):
+        test_size=x_test
+        x_tr, x_te, y_tr, y_te = train_test_split(x_train, y_train, test_size=test_size)
+    else:
+        x_tr, x_te, y_tr, y_te = (x_train, x_test, y_train, y_test)
     # We run the regression
     try:
         start_time = time.time()
-        reg.fit(x_train, y_train)
-        if (x_test is None) or (y_test is None):
-            error_train = error_func(reg.predict(x_train), y_train)
+        reg.fit(x_tr, y_tr)
+        if (x_te is None) or (y_te is None):
+            error_train = error_func(reg.predict(x_tr), y_tr)
             error_test = _error_test
         else:
-            error_train = error_func(reg.predict(x_train), y_train)
-            error_test = error_func(reg.predict(x_test), y_test)
-            x_train = np.concatenate([x_train, x_test], axis=0)
-            y_train = np.concatenate([y_train, y_test], axis=0)
+            error_train = error_func(reg.predict(x_tr), y_tr)
+            error_test = error_func(reg.predict(x_te), y_te)
+            x_tr = np.concatenate([x_tr, x_te], axis=0)
+            y_tr = np.concatenate([y_tr, y_te], axis=0)
         run_time = time.time() - start_time
         if (_run_time is not None):
             run_time = _run_time
         if show:
             t = _repr_show(i, name, error_train, error_test)
             plt.title(t)
-            show_regression(reg, x_train, y_train)
+            show_regression(reg, x_tr, y_tr)
         if verbose:
             t = _repr_verbose(i, name, error_train, error_test, run_time)
             print(t)
@@ -370,8 +386,8 @@ def run_all_regressions(x_train, y_train, regs=0, error_func=mean_squared_error,
     if (sort_key is None):
         sort_key = lambda x: (x["error_train"] if (x["error_test"] is None) else x["error_test"])
     # We define regs
-    if isinstance(regs, int):
-        regs = get_regressions(0)
+    if isinstance(regs, int) or isinstance(regs, str):
+        regs = get_regressions(regs)
     # We properly define show, ie it will be a list of bool
     show = _verbose_show_proper(len(regs), show)
     verbose = _verbose_show_proper(len(regs), verbose)

@@ -147,17 +147,22 @@ def show_classification(clf, x, y):
 
 
 
-def _execute_classifier_file(s):
+def get_classifiers_from(s):
     """
-    Execute a file containing classifiers, in python 2 or 3
+    Execute a string or file containing classifiers, in python 2 or 3
     It outputs the classifiers defined
     """
+    if (s[-3:] == ".py"):
+        with open(s) as f:
+            r = f.read()
+    else:
+        r = s
     if (sys.version_info[0] == 2):
-        exec(s)
+        exec(r)
         return classifiers
     else:
         namespace = globals()
-        exec(s, namespace)
+        exec(r, namespace)
         return namespace['classifiers']
 
 
@@ -186,18 +191,25 @@ def get_classifiers(n=0):
                 classifiers = [("Nearest Neighbors", KNeighborsClassifier(3))]
             elif (n == 0):
                 this_file_path = '/'.join(__file__.split('/')[:-1])
-                with open(os.path.join(this_file_path, "clf_lists/one_of_each.py")) as f:
-                    r = f.read()
-                    classifiers = _execute_classifier_file(r)
+                filename = os.path.join(this_file_path, "clf_lists/one_of_each.py")
+                classifiers = get_classifiers_from(filename)
+            elif (n == 1):
+                this_file_path = '/'.join(__file__.split('/')[:-1])
+                filename = os.path.join(this_file_path, "clf_lists/one_of_each_plus_reg.py")
+                classifiers = get_classifiers_from(filename)
+                # with open(os.path.join(this_file_path, "clf_lists/one_of_each.py")) as f:
+                #     r = f.read()
+                #     classifiers = _execute_classifier_file(r)
             else:
                 classifiers = []
         elif isinstance(n, str):
-            if (n[-3:] == ".py"):
-                with open(n) as f:
-                    r = f.read()
-                    classifiers = _execute_classifier_file(r)
-            else:
-                classifiers = _execute_classifier_file(n)
+            classifiers = get_classifiers_from(n)
+            # if (n[-3:] == ".py"):
+            #     with open(n) as f:
+            #         r = f.read()
+            #         classifiers = _execute_classifier_file(r)
+            # else:
+            #     classifiers = _execute_classifier_file(n)
         else:
             classifiers = []
     except:
@@ -247,25 +259,34 @@ def _run_one_classifier(x_train, y_train, clf, x_test=None, y_test=None, verbose
     """
     # We define clf and name etc
     clf, name = _get_clf_attributes(clf)
+    # We separate the train test data if asked of
+    if isinstance(x_test, int):
+        test_size = float(x_test)/x_train.shape[0]
+        x_tr, x_te, y_tr, y_te = train_test_split(x_train, y_train, test_size=test_size)
+    elif isinstance(x_test, float):
+        test_size=x_test
+        x_tr, x_te, y_tr, y_te = train_test_split(x_train, y_train, test_size=test_size)
+    else:
+        x_tr, x_te, y_tr, y_te = (x_train, x_test, y_train, y_test)
     # We run the classification
     try:
         start_time = time.time()
-        clf.fit(x_train, y_train)
-        if (x_test is None) or (y_test is None):
-            score_train = clf.score(x_train, y_train)
+        clf.fit(x_tr, y_tr)
+        if (x_te is None) or (y_te is None):
+            score_train = clf.score(x_tr, y_tr)
             score_test = _score_test
         else:
-            score_train = clf.score(x_train, y_train)
-            score_test = clf.score(x_test, y_test)
-            x_train = np.concatenate([x_train, x_test], axis=0)
-            y_train = np.concatenate([y_train, y_test], axis=0)
+            score_train = clf.score(x_tr, y_tr)
+            score_test = clf.score(x_te, y_te)
+            x_tr = np.concatenate([x_tr, x_te], axis=0)
+            y_tr = np.concatenate([y_tr, y_te], axis=0)
         run_time = time.time() - start_time
         if (_run_time is not None):
             run_time = _run_time
         if show:
             t = _repr_show(i, name, score_train, score_test)
             plt.title(t)
-            show_classification(clf, x_train, y_train)
+            show_classification(clf, x_tr, y_tr)
         if verbose:
             t = _repr_verbose(i, name, score_train, score_test, run_time)
             print(t)
@@ -382,8 +403,8 @@ def run_all_classifiers(x_train, y_train, clfs=0, x_test=None, y_test=None, sele
     if (sort_key is None):
         sort_key = lambda x: (-x["score_train"] if (x["score_test"] is None) else -x["score_test"])
     # We define clfs
-    if isinstance(clfs, int):
-        clfs = get_classifiers(0)
+    if isinstance(clfs, int) or isinstance(clfs, str):
+        clfs = get_classifiers(clfs)
     # We properly define show, ie it will be a list of bool
     show = _verbose_show_proper(len(clfs), show)
     verbose = _verbose_show_proper(len(clfs), verbose)
