@@ -14,15 +14,15 @@ try:
 except ImportError:
     Iterable = (tuple, list, set, dict, np.ndarray)
     
-# from pykernels.pykernels.basic import *
-
 from .includes import *
+from utils.split_dataset import Sklearn_Split_Dataset
 
-from sklearn.exceptions import DataConversionWarning
+from sklearn.exceptions import DataConversionWarning, ConvergenceWarning
 
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=DataConversionWarning)
+warnings.filterwarnings("ignore", category=ConvergenceWarning)
     
 
 
@@ -178,19 +178,10 @@ def get_regressions(n=0):
                 this_file_path = '/'.join(__file__.split('/')[:-1])
                 filename = os.path.join(this_file_path, "reg_lists/one_of_each.py")
                 regressions = get_regressions_from(filename)
-                # with open(os.path.join(this_file_path, "reg_lists/one_of_each.py")) as f:
-                #     r = f.read()
-                #     regressions = _execute_regression_file(r)
             else:
                 regressions = []
         elif isinstance(n, str):
-            regressions = get_regressions_from(filename)
-            # if (n[-3:] == ".py"):
-            #     with open(n) as f:
-            #         r = f.read()
-            #         regressions = _execute_regression_file(r)
-            # else:
-            #     regressions = _execute_regression_file(n)
+            regressions = get_regressions_from(n)
         else:
             regressions = []
     except:
@@ -200,7 +191,7 @@ def get_regressions(n=0):
 
 
 
-def run_one_regression(x_train, y_train, reg, error_func=mean_squared_error, x_test=None, y_test=None, verbose=True, show=True, i=""):
+def run_one_regression(x_train, y_train, reg, error_func=mean_squared_error, x_test=None, y_test=None, verbose=True, show=True, i="", split_func=Sklearn_Split_Dataset(), seed=None):
     """
     ********* Description *********
     Fit and return the error of one regression
@@ -210,17 +201,19 @@ def run_one_regression(x_train, y_train, reg, error_func=mean_squared_error, x_t
     reg : (sklearn.regression) : regression used
     error_func : (func) = sklearn.mean_squared_error : the error used
     x_test : np.ndarray(m, dx) or (int) or (float) = None : test points, or
-        indication to use K-fold separation on x_train, 
-        more precisely if (int) then the train is on (n-x_test) points, 
+        indication to use K-fold separation on x_train,
+        more precisely if (int) then the train is on (n-x_test) points,
         and if (float) then the train is on (n*(1-x_test)) points
         if None we don't compute test error
     y_test : np.ndarray(m, dx) = None : test target
     verbose : (bool) = True : whether we print the regression error
     show : (bool) = True : whether we plot the regression
-    i : (str) or (int) : the index of this regression, generally used by run_all_regressions
+    i : (str) or (int) = "" : the index of this regression, generally used by run_all_regressions
+    split_func : (func) = Sklearn_Split_Dataset() : split the train data into a train + validation set
+    seed : (int) or None = random state initialization
     ********* Return *********
     (error_train, error_test, running_time)
-    (None, None, None) if it somehow failed
+    (None, None, None) if somehow it failed
     ********* Examples *********
     x, y = load_dataset()
     reg = Ridge()
@@ -228,12 +221,16 @@ def run_one_regression(x_train, y_train, reg, error_func=mean_squared_error, x_t
     error_train, error_test, run_time = run_one_regression(x, y, reg, show=False)
     error_train, error_test, run_time = run_one_regression(x, y, reg, show=False, verbose=False)
     error_train, error_test, run_time = run_one_regression(x, y, reg, i=666)
+    error_train, error_test, run_time = run_one_regression(x, y, reg, show=False, x_test=0.1)
+    error_train, error_test, run_time = run_one_regression(x, y, reg, show=False, x_test=0.1, seed=1)
+    from utils.split_dataset import Split_Dataset
+    error_train, error_test, run_time = run_one_regression(x, y, reg, show=False, x_test=0.1, seed=1, split_func=Split_Dataset())
     """
-    return _run_one_regression(x_train, y_train, reg, error_func=error_func, x_test=x_test, y_test=y_test, verbose=verbose, show=show, i=i)
+    return _run_one_regression(x_train, y_train, reg, error_func=error_func, x_test=x_test, y_test=y_test, verbose=verbose, show=show, i=i, split_func=split_func, seed=seed)
 
 
 
-def _run_one_regression(x_train, y_train, reg, error_func=mean_squared_error, x_test=None, y_test=None, verbose=True, show=True, i="", _error_test=None, _run_time=None):
+def _run_one_regression(x_train, y_train, reg, error_func=mean_squared_error, x_test=None, y_test=None, verbose=True, show=True, i="", split_func=Sklearn_Split_Dataset(), seed=None, _error_test=None, _run_time=None):
     """
     Hidden function that is used by run_all_regression
     _error_test : (float) = None : if x_test = None, we set the test error to this value
@@ -242,30 +239,26 @@ def _run_one_regression(x_train, y_train, reg, error_func=mean_squared_error, x_
     # We define reg and name etc
     reg, name = _get_reg_attributes(reg)
     # We separate the train test data if asked of
-    if isinstance(x_test, int):
-        test_size = float(x_test)/x_train.shape[0]
-        x_tr, x_te, y_tr, y_te = train_test_split(x_train, y_train, test_size=test_size)
-    elif isinstance(x_test, float):
-        test_size=x_test
-        x_tr, x_te, y_tr, y_te = train_test_split(x_train, y_train, test_size=test_size)
+    if isinstance(x_test, int) or isinstance(x_test, float):
+        x_tr, x_te, y_tr, y_te = split_func(x_train, y_train, test_size=x_test, seed=seed)
     else:
         x_tr, x_te, y_tr, y_te = (x_train, x_test, y_train, y_test)
     # We run the regression
     try:
         start_time = time.time()
         reg.fit(x_tr, y_tr)
+        error_train = error_func(reg.predict(x_tr), y_tr)
         if (x_te is None) or (y_te is None):
-            error_train = error_func(reg.predict(x_tr), y_tr)
             error_test = _error_test
         else:
-            error_train = error_func(reg.predict(x_tr), y_tr)
             error_test = error_func(reg.predict(x_te), y_te)
-            x_tr = np.concatenate([x_tr, x_te], axis=0)
-            y_tr = np.concatenate([y_tr, y_te], axis=0)
         run_time = time.time() - start_time
         if (_run_time is not None):
             run_time = _run_time
         if show:
+            if (x_te is not None) and (y_te is not None):
+                x_tr = np.concatenate([x_tr, x_te], axis=0)
+                y_tr = np.concatenate([y_tr, y_te], axis=0)
             t = _repr_show(i, name, error_train, error_test)
             plt.title(t)
             show_regression(reg, x_tr, y_tr)
@@ -347,7 +340,7 @@ def _verbose_show_proper(length, verbshow):
 
 
 
-def run_all_regressions(x_train, y_train, regs=0, error_func=mean_squared_error, x_test=None, y_test=None, selection_algo=None, verbose=True, show=False, final_verbose=range(10), final_show=False, sort_key=None):
+def run_all_regressions(x_train, y_train, regs=0, error_func=mean_squared_error, x_test=None, y_test=None, selection_algo=None, verbose=True, show=False, final_verbose=range(10), final_show=False, sort_key=None, split_func=Sklearn_Split_Dataset(), seed=None):
     """
     ********* Description *********
     Try several different regressions, and can show and verbose some of them
@@ -368,6 +361,8 @@ def run_all_regressions(x_train, y_train, regs=0, error_func=mean_squared_error,
     final_verbose : (bool) or [(bool)] or [(int)] = range(10) : same as verbose but for reg classement
     final_show : (bool) or [(bool)] or [(int)] = False : same as show but for reg classement
     sort_key : (lambda reg -> float) = lambda x:x["error_test"] : key for regressions final classment
+    split_func : (func) = Sklearn_Split_Dataset() : split the train data into a train + validation set
+    seed : (int) or None = random state initialization
     ********* Return *********
     error of regressions tested
     ********* Examples *********
@@ -381,6 +376,9 @@ def run_all_regressions(x_train, y_train, regs=0, error_func=mean_squared_error,
     errors = run_all_regressions(x, y, x_test=0.1, verbose=True, selection_algo=sel)
     sel = Uniform_MAB(1, None, 8) # Will run during 8 seconds
     errors = run_all_regressions(x, y, x_test=0.1, verbose=False, selection_algo=sel)
+    errors = run_all_regressions(x, y, x_test=0.1, seed=777)
+    from utils.split_dataset import Split_Dataset
+    errors = run_all_regressions(x, y, x_test=0.1, seed=777, split_func=Split_Dataset())
     """
     # We define sort_key
     if (sort_key is None):
@@ -391,13 +389,6 @@ def run_all_regressions(x_train, y_train, regs=0, error_func=mean_squared_error,
     # We properly define show, ie it will be a list of bool
     show = _verbose_show_proper(len(regs), show)
     verbose = _verbose_show_proper(len(regs), verbose)
-    # We properly define test_size
-    if isinstance(x_test, int):
-        test_size = float(x_test)/x_train.shape[0]
-    elif isinstance(x_test, float):
-        test_size=x_test
-    else:
-        test_size=None
     # We run all the regressions following selection_algo
     if any(verbose):
         print("\n\n")
@@ -406,10 +397,10 @@ def run_all_regressions(x_train, y_train, regs=0, error_func=mean_squared_error,
     if selection_algo is None:
         # In this section there are no particular reg selection
         # We separate the train test data if asked of
-        if x_test is None:
-            x_tr, x_te, y_tr, y_te = (x_train, x_test, y_train, y_test)
+        if isinstance(x_test, int) or isinstance(x_test, float):
+            x_tr, x_te, y_tr, y_te = split_func(x_train, y_train, test_size=x_test, seed=seed)
         else:
-            x_tr, x_te, y_tr, y_te = train_test_split(x_train, y_train, test_size=test_size)
+            x_tr, x_te, y_tr, y_te = (x_train, x_test, y_train, y_test)
         # We try over all regressions
         errors = []
         for ic, sho, verb, reg in zip(range(len(show)), show, verbose, regs):
@@ -420,12 +411,17 @@ def run_all_regressions(x_train, y_train, regs=0, error_func=mean_squared_error,
         # In this section we follow the class selection_algo to perform the regressions tests
         selection_algo.set(n_arms=len(regs))
         arm = selection_algo.next_arm()
+        if seed is None:
+            sd = np.random.randint(1000000)
+        else:
+            sd = seed
         while (arm is not None):
             # We separate the train test data if asked of
-            if x_test is None:
-                x_tr, x_te, y_tr, y_te = (x_train, x_test, y_train, y_test)
+            n_draw = len(selection_algo.list_rewards[arm])
+            if isinstance(x_test, int) or isinstance(x_test, float):
+                x_tr, x_te, y_tr, y_te = split_func(x_train, y_train, test_size=x_test, seed=sd+n_draw)
             else:
-                x_tr, x_te, y_tr, y_te = train_test_split(x_train, y_train, test_size=test_size)
+                x_tr, x_te, y_tr, y_te = (x_train, x_test, y_train, y_test)
             tr, te, ti = _run_one_regression(x_tr, y_tr, regs[arm], error_func, x_te, y_te, verbose[arm], show[arm], i=nbr_ex)
             selection_algo.update_reward(te, arm=arm, other_data=(tr, ti))
             arm = selection_algo.next_arm()
@@ -454,8 +450,8 @@ def run_all_regressions(x_train, y_train, regs=0, error_func=mean_squared_error,
         errors_sorted = [e for e in errors if e["time"] is not None]
         errors_sorted = sorted(errors_sorted, key=sort_key)
         for ic, ss, sho, verb in zip(range(len(final_show)), errors_sorted, final_show, final_verbose):
-             if verb or sho:
-                 _run_one_regression(x_train, y_train, ss["reg"], error_func, verbose=verb, show=sho, i=ic, _error_test=ss["error_test"], _run_time=ss["time"])
+            if verb or sho:
+                _run_one_regression(x_train, y_train, ss["reg"], error_func, verbose=verb, show=sho, i=ic, _error_test=ss["error_test"], _run_time=ss["time"])
     return errors
 
 
@@ -479,9 +475,9 @@ def load_dataset(dataset="default"):
     x = np.random.randn(1000,1)
     y = x*3 + 2 + np.random.randn(1000,1)/10.
     return x, y
-    
 
-        
+
+
 def run_examples(verbose=True, show=True, dataset="default"):
     """
     ********* Description *********

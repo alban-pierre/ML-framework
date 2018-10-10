@@ -7,26 +7,29 @@ try:
 except ImportError:
     from sklearn.cross_validation import train_test_split
 from sklearn import preprocessing
-import time
 import os
 import sys
+import time
 try:
     from collections.abc import Iterable
 except ImportError:
     Iterable = (tuple, list, set, dict, np.ndarray)
 
 from .includes import *
+from utils.split_dataset import Sklearn_Split_Dataset
 
-from sklearn.exceptions import ConvergenceWarning
+from sklearn.exceptions import DataConversionWarning, ConvergenceWarning
 
 import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=DataConversionWarning)
 warnings.filterwarnings("ignore", category=ConvergenceWarning)
-
+  
 
 
 def help():
     print("""
-Classifier, ie takes an array as input and outputs 0 or 1
+Classifiers, ie takes an array as input and outputs 0 or 1
 
 Uses the package scikit-learn 
 
@@ -113,7 +116,7 @@ Example of use :
 def show_classification(clf, x, y):
     """
     ********* Description *********
-    Print a 2D decision space
+    Plot a 2D decision space
     ********* Params *********
     clf : (sklearn.classifier) : classifier
     x : np.ndarray(n, 2) : points
@@ -197,29 +200,20 @@ def get_classifiers(n=0):
                 this_file_path = '/'.join(__file__.split('/')[:-1])
                 filename = os.path.join(this_file_path, "clf_lists/one_of_each_plus_reg.py")
                 classifiers = get_classifiers_from(filename)
-                # with open(os.path.join(this_file_path, "clf_lists/one_of_each.py")) as f:
-                #     r = f.read()
-                #     classifiers = _execute_classifier_file(r)
             else:
                 classifiers = []
         elif isinstance(n, str):
             classifiers = get_classifiers_from(n)
-            # if (n[-3:] == ".py"):
-            #     with open(n) as f:
-            #         r = f.read()
-            #         classifiers = _execute_classifier_file(r)
-            # else:
-            #     classifiers = _execute_classifier_file(n)
         else:
             classifiers = []
     except:
-        print("Error while loading a list of classifiers, the error is likely to be in the argument n.")
+        print("Error while loading a list of classifiers, the error is likely to be in the argument n")
         raise
     return [(i[0], i[1]) for i in classifiers]
 
 
 
-def run_one_classifier(x_train, y_train, clf, x_test=None, y_test=None, verbose=True, show=True, i=""):
+def run_one_classifier(x_train, y_train, clf, x_test=None, y_test=None, verbose=True, show=True, i="", split_func=Sklearn_Split_Dataset(), seed=None):
     """
     ********* Description *********
     Fit and return the score of one classifier
@@ -235,23 +229,29 @@ def run_one_classifier(x_train, y_train, clf, x_test=None, y_test=None, verbose=
     y_test : np.ndarray(m, dx) = None : test target
     verbose : (bool) = True : whether we print the classifier score
     show : (bool) = True : whether we plot the classifier
-    i : (str) or (int) : the index of this classifier, generally used by run_all_classifiers
+    i : (str) or (int) = "" : the index of this classifier, generally used by run_all_classifiers
+    split_func : (func) = Sklearn_Split_Dataset() : split the train data into a train + validation set
+    seed : (int) or None = random state initialization
     ********* Return *********
     (score_train, score_test, running_time)
-    (None, None, None) if it somehow failed
+    (None, None, None) if somehow it failed
     ********* Examples *********
     x, y = load_dataset()
     clf = KNeighborsClassifier(3)
-    score_train, score_test = run_one_classifier(x, y, clf)
-    score_train, score_test = run_one_classifier(x, y, clf, show=False)
-    score_train, score_test = run_one_classifier(x, y, clf, show=False, verbose=False)
-    score_train, score_test = run_one_classifier(x, y, clf, i=666)
+    score_train, score_test, run_time = run_one_classifier(x, y, clf)
+    score_train, score_test, run_time = run_one_classifier(x, y, clf, show=False)
+    score_train, score_test, run_time = run_one_classifier(x, y, clf, show=False, verbose=False)
+    score_train, score_test, run_time = run_one_classifier(x, y, clf, i=666)
+    score_train, score_test, run_time = run_one_classifier(x, y, clf, show=False, x_test=0.1)
+    score_train, score_test, run_time = run_one_classifier(x, y, clf, show=False, x_test=0.1, seed=1)
+    from utils.split_dataset import Split_Dataset
+    score_train, score_test, run_time = run_one_classifier(x, y, clf, show=False, x_test=0.1, seed=1, split_func=Split_Dataset())
     """
-    return _run_one_classifier(x_train, y_train, clf, x_test=x_test, y_test=y_test, verbose=verbose, show=show, i=i)
+    return _run_one_classifier(x_train, y_train, clf, x_test=x_test, y_test=y_test, verbose=verbose, show=show, i=i, split_func=split_func, seed=seed)
 
 
     
-def _run_one_classifier(x_train, y_train, clf, x_test=None, y_test=None, verbose=True, show=True, i="", _score_test=None, _run_time=None):
+def _run_one_classifier(x_train, y_train, clf, x_test=None, y_test=None, verbose=True, show=True, i="", split_func=Sklearn_Split_Dataset(), seed=None, _score_test=None, _run_time=None):
     """
     Hidden function that is used by run_all_classifier
     _score_test : (float) = None : if x_test = None, we set the test score to this value
@@ -260,30 +260,26 @@ def _run_one_classifier(x_train, y_train, clf, x_test=None, y_test=None, verbose
     # We define clf and name etc
     clf, name = _get_clf_attributes(clf)
     # We separate the train test data if asked of
-    if isinstance(x_test, int):
-        test_size = float(x_test)/x_train.shape[0]
-        x_tr, x_te, y_tr, y_te = train_test_split(x_train, y_train, test_size=test_size)
-    elif isinstance(x_test, float):
-        test_size=x_test
-        x_tr, x_te, y_tr, y_te = train_test_split(x_train, y_train, test_size=test_size)
+    if isinstance(x_test, int) or isinstance(x_test, float):
+        x_tr, x_te, y_tr, y_te = split_func(x_train, y_train, test_size=x_test, seed=seed)
     else:
         x_tr, x_te, y_tr, y_te = (x_train, x_test, y_train, y_test)
     # We run the classification
     try:
         start_time = time.time()
         clf.fit(x_tr, y_tr)
+        score_train = clf.score(x_tr, y_tr)
         if (x_te is None) or (y_te is None):
-            score_train = clf.score(x_tr, y_tr)
             score_test = _score_test
         else:
-            score_train = clf.score(x_tr, y_tr)
             score_test = clf.score(x_te, y_te)
-            x_tr = np.concatenate([x_tr, x_te], axis=0)
-            y_tr = np.concatenate([y_tr, y_te], axis=0)
         run_time = time.time() - start_time
         if (_run_time is not None):
             run_time = _run_time
         if show:
+            if (x_te is not None) and (y_te is not None):
+                x_tr = np.concatenate([x_tr, x_te], axis=0)
+                y_tr = np.concatenate([y_tr, y_te], axis=0)
             t = _repr_show(i, name, score_train, score_test)
             plt.title(t)
             show_classification(clf, x_tr, y_tr)
@@ -365,7 +361,7 @@ def _verbose_show_proper(length, verbshow):
 
 
 
-def run_all_classifiers(x_train, y_train, clfs=0, x_test=None, y_test=None, selection_algo=None, verbose=True, show=False, final_verbose=range(10), final_show=False, sort_key=None):
+def run_all_classifiers(x_train, y_train, clfs=0, x_test=None, y_test=None, selection_algo=None, verbose=True, show=False, final_verbose=range(10), final_show=False, sort_key=None, split_func=Sklearn_Split_Dataset(), seed=None):
     """
     ********* Description *********
     Try several different classifiers, and can show and verbose some of them
@@ -385,6 +381,8 @@ def run_all_classifiers(x_train, y_train, clfs=0, x_test=None, y_test=None, sele
     final_verbose : (bool) or [(bool)] or [(int)] = range(10) : same as verbose but for clf classement
     final_show : (bool) or [(bool)] or [(int)] = False : same as show but for clf classement
     sort_key : (lambda clf -> float) = lambda x:-x["score_test"] : key for classifiers final classment
+    split_func : (func) = Sklearn_Split_Dataset() : split the train data into a train + validation set
+    seed : (int) or None = random state initialization
     ********* Return *********
     score of classifiers tested
     ********* Examples *********
@@ -398,6 +396,9 @@ def run_all_classifiers(x_train, y_train, clfs=0, x_test=None, y_test=None, sele
     scores = run_all_classifiers(x, y, x_test=0.1, verbose=True, selection_algo=sel)
     sel = Uniform_MAB(1, None, 8) # Will run during 8 seconds
     scores = run_all_classifiers(x, y, x_test=0.1, verbose=False, selection_algo=sel)
+    scores = run_all_classifiers(x, y, x_test=0.1, seed=777)
+    from utils.split_dataset import Split_Dataset
+    scores = run_all_classifiers(x, y, x_test=0.1, seed=777, split_func=Split_Dataset())
     """
     # We define sort_key
     if (sort_key is None):
@@ -408,13 +409,6 @@ def run_all_classifiers(x_train, y_train, clfs=0, x_test=None, y_test=None, sele
     # We properly define show, ie it will be a list of bool
     show = _verbose_show_proper(len(clfs), show)
     verbose = _verbose_show_proper(len(clfs), verbose)
-    # We properly define test_size
-    if isinstance(x_test, int):
-        test_size = float(x_test)/x_train.shape[0]
-    elif isinstance(x_test, float):
-        test_size=x_test
-    else:
-        test_size=None
     # We run all the classifiers following selection_algo
     if any(verbose):
         print("\n\n")
@@ -423,10 +417,10 @@ def run_all_classifiers(x_train, y_train, clfs=0, x_test=None, y_test=None, sele
     if selection_algo is None:
         # In this section there are no particular clf selection
         # We separate the train test data if asked of
-        if x_test is None:
-            x_tr, x_te, y_tr, y_te = (x_train, x_test, y_train, y_test)
+        if isinstance(x_test, int) or isinstance(x_test, float):
+            x_tr, x_te, y_tr, y_te = split_func(x_train, y_train, test_size=x_test, seed=seed)
         else:
-            x_tr, x_te, y_tr, y_te = train_test_split(x_train, y_train, test_size=test_size)
+            x_tr, x_te, y_tr, y_te = (x_train, x_test, y_train, y_test)
         # We try over all classifiers
         scores = []
         for ic, sho, verb, clf in zip(range(len(show)), show, verbose, clfs):
@@ -437,12 +431,17 @@ def run_all_classifiers(x_train, y_train, clfs=0, x_test=None, y_test=None, sele
         # In this section we follow the class selection_algo to perform the classifiers tests
         selection_algo.set(n_arms=len(clfs))
         arm = selection_algo.next_arm()
+        if seed is None:
+            sd = np.random.randint(1000000)
+        else:
+            sd = seed
         while (arm is not None):
             # We separate the train test data if asked of
-            if x_test is None:
-                x_tr, x_te, y_tr, y_te = (x_train, x_test, y_train, y_test)
+            n_draw = len(selection_algo.list_rewards[arm])
+            if isinstance(x_test, int) or isinstance(x_test, float):
+                x_tr, x_te, y_tr, y_te = split_func(x_train, y_train, test_size=x_test, seed=sd+n_draw)
             else:
-                x_tr, x_te, y_tr, y_te = train_test_split(x_train, y_train, test_size=test_size)
+                x_tr, x_te, y_tr, y_te = (x_train, x_test, y_train, y_test)
             tr, te, ti = _run_one_classifier(x_tr, y_tr, clfs[arm], x_te, y_te, verbose[arm], show[arm], i=nbr_ex)
             selection_algo.update_reward(te, arm=arm, other_data=(tr, ti))
             arm = selection_algo.next_arm()
