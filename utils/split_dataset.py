@@ -65,7 +65,7 @@ class Uniform_Split_Dataset(Split_Dataset):
         self.indexes_test = []
         self.indexes = []
         # Two different algorithms, don't know which one is the fastest
-        if False: # algo 1
+        if True: # algo 1
             for k,v in ls.items():
                 indexes = np.asarray([i for i,j in enumerate(labels) if j == k])
                 np.random.shuffle(indexes)
@@ -73,8 +73,9 @@ class Uniform_Split_Dataset(Split_Dataset):
                 self.indexes.append(indexes[v:])
             self.indexes_test = np.concatenate(self.indexes_test)
             self.indexes = np.concatenate(self.indexes)
-        else: # algo 2
-            np.random.shuffle(labels)
+        else: # algo 2 does not work yet
+            labels = np.copy(labels)
+            np.random.shuffle(labels) # inverse shuffle the indexes afterwards !!
             count = {i:0 for i in count.keys()}
             for i,lab in enumerate(labels):
                 if (count[lab] < ls[lab]):

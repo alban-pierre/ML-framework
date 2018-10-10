@@ -1,12 +1,13 @@
 import torch
 import torchvision
+import torch.nn as nn
 import torch.nn.modules as M
 import copy
 from math import log10, floor
 import time
 import numpy as np
 
-from visualization_utils import *
+from .visualization_utils import *
 
 
 
@@ -16,7 +17,7 @@ def train(net, trainloader, criterion, optimizer, nbr_epochs=-1, nbr_images=-1, 
             print("Warning : you should set either nbr_epochs or nbr_images")
             nbr_epochs = 1
         if (nbr_epochs < 0):
-            nbr_epochs = 1 + int(nbr_images/len(trainloader))
+            nbr_epochs = 2 + int(nbr_images/len(trainloader)) # if we arrive at the end of an epoch
         if isinstance(train_monitors, Train_Monitor):
             train_monitors = [train_monitors]
         if isinstance(train_monitors, list):
@@ -46,7 +47,7 @@ def train(net, trainloader, criterion, optimizer, nbr_epochs=-1, nbr_images=-1, 
         if ("i" in resume.keys()):
             i = resume["i"]
         urgent_stop = False
-        stop_time = 0
+        start_i = i
         args_dict = {}
         args_dict["i"] = i
         args_dict["total_running_loss"] = total_running_loss
@@ -60,11 +61,12 @@ def train(net, trainloader, criterion, optimizer, nbr_epochs=-1, nbr_images=-1, 
             start_time = time.time() - resume["time"]
         else:
             start_time = time.time()
+        stop_time = time.time()
         for epoch in range(start_epoch, start_epoch + nbr_epochs):
             if urgent_stop:
                 break;
             for data in trainloader:
-                if (nbr_images >= 0) and (i >= nbr_images):
+                if (nbr_images >= 0) and (i >= nbr_images + start_i):
                     urgent_stop = True
                     break;
                 if (max_time >= 0) and (time.time() - start_time > max_time):
@@ -215,6 +217,35 @@ def full_test(net, testloader, classes, to_print=True):
     res["fp"] = class_fp
     return res
 
+
+
+def get_layers(net):
+    return _get_layers(net, [])
+
+
+
+def _get_layers(net, all_layers=[]):
+    for layer in net.children():
+        if type(layer) == nn.Sequential: # if sequential layer
+            all_layers += _get_layers(layer, [])
+        if list(layer.children()) == []: # if leaf node, add it to list
+            all_layers.append(layer)
+    return all_layers
+
+
+
+def freeze(net, layers=3):
+    all_layers = get_layers(net)
+    all_layers = [lay for lay in all_layers if hasattr(lay, 'weight')]
+    if (layers < 0):
+        layers += len(all_layers)
+    for i,lay in enumerate(all_layers):
+        if (i < layers):
+            lay.weight.requires_grad = False
+            lay.bias.requires_grad = False
+        else:
+            lay.weight.requires_grad = True
+            lay.bias.requires_grad = True
 
 
 # ------------------------------------------------------------------ #
