@@ -6,3 +6,4 @@ kernels/tests*
 kernels/doc*
 kernels/pykernels/graph/data*
 datasets/*
+saved_nets/*

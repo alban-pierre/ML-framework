@@ -12,6 +12,7 @@ from .visualization_utils import *
 
 
 def train(net, trainloader, criterion, optimizer, nbr_epochs=-1, nbr_images=-1, max_time=-1, train_monitors=[], resume=None):
+    total_time = time.time()
     try:
         if (nbr_epochs < 0) and (nbr_images < 0):
             print("Warning : you should set either nbr_epochs or nbr_images")
@@ -23,45 +24,51 @@ def train(net, trainloader, criterion, optimizer, nbr_epochs=-1, nbr_images=-1, 
         if isinstance(train_monitors, list):
             train_monitors = List_Train_Monitor(train_monitors, default_step=len(trainloader))
         # Initialization and/or loading of the previous train parameters
-        total_running_loss = 0.0
-        total_train_error = 0
-        nbr_loss_examples = 0
-        nbr_train_examples = 0
-        start_epoch = 0
-        i = 0
         if resume is None:
             resume = {}
+        train_state = {}
+        # We define monitors data
+        monitors_data = {}
         for k in train_monitors.names():
-            if k not in resume.keys():
-                resume[k] = []
-        if ("_total_running_loss" in resume.keys()):
-            total_running_loss = resume["_total_running_loss"]
-        if ("_total_train_error" in resume.keys()):
-            total_train_error = resume["_total_train_error"]
-        if ("_nbr_loss_examples" in resume.keys()):
-            nbr_loss_examples = resume["_nbr_loss_examples"]
-        if ("_nbr_train_examples" in resume.keys()):
-            nbr_train_examples = resume["_nbr_train_examples"]
+            monitors_data[k] = []
+            if k in resume.keys():
+                monitors_data[k] = resume[k]
+        # We setup the train state
+        total_running_loss = 0.0
+        if ("total_running_loss" in resume.keys()):
+            total_running_loss = resume["total_running_loss"]
+        total_train_error = 0
+        if ("total_train_error" in resume.keys()):
+            total_train_error = resume["total_train_error"]
+        nbr_loss_examples = 0
+        if ("nbr_loss_examples" in resume.keys()):
+            nbr_loss_examples = resume["nbr_loss_examples"]
+        nbr_train_examples = 0
+        if ("nbr_train_examples" in resume.keys()):
+            nbr_train_examples = resume["nbr_train_examples"]
+        start_epoch = 0
         if ("epoch" in resume.keys()):
             start_epoch = resume["epoch"]
+        i = 0
         if ("i" in resume.keys()):
             i = resume["i"]
-        urgent_stop = False
         start_i = i
-        args_dict = {}
-        args_dict["i"] = i
-        args_dict["total_running_loss"] = total_running_loss
-        args_dict["total_train_error"] = total_train_error
-        args_dict["nbr_loss_examples"] = nbr_loss_examples
-        args_dict["nbr_train_examples"] = nbr_train_examples
-        # We initialize the train monitors
-        train_monitors.resume(net, args_dict)
-        # We start the clock just before training !
-        if ("time" in resume.keys()):
-            start_time = time.time() - resume["time"]
-        else:
-            start_time = time.time()
         stop_time = time.time()
+        start_time = stop_time
+        if ("time" in resume.keys()):
+            start_time = stop_time - resume["time"]
+        urgent_stop = False
+        # We initialize the train state variable
+        train_state["i"] = i
+        train_state["epoch"] = int((i-1)/len(trainloader))
+        train_state["time"] = stop_time - start_time
+        train_state["total_running_loss"] = total_running_loss
+        train_state["total_train_error"] = total_train_error
+        train_state["nbr_loss_examples"] = nbr_loss_examples
+        train_state["nbr_train_examples"] = nbr_train_examples
+        train_monitors.resume(net, train_state)
+        # We start the clock just before training !
+        start_time += time.time() - stop_time
         for epoch in range(start_epoch, start_epoch + nbr_epochs):
             if urgent_stop:
                 break;
@@ -93,38 +100,43 @@ def train(net, trainloader, criterion, optimizer, nbr_epochs=-1, nbr_images=-1, 
                 nbr_train_examples += labels.size(0)
                 # We execute the train monitors
                 stop_time = time.time()
-                args_dict["i"] = i
-                args_dict["total_running_loss"] = total_running_loss
-                args_dict["total_train_error"] = total_train_error
-                args_dict["nbr_loss_examples"] = nbr_loss_examples
-                args_dict["nbr_train_examples"] = nbr_train_examples
-                res, to_print = train_monitors(net, args_dict)
-                for k,v in res.items():
-                    resume[k].append((i, stop_time - start_time, v))
+                train_state["i"] = i
+                train_state["epoch"] = int((i-1)/len(trainloader))
+                train_state["time"] = stop_time - start_time
+                train_state["total_running_loss"] = total_running_loss
+                train_state["total_train_error"] = total_train_error
+                train_state["nbr_loss_examples"] = nbr_loss_examples
+                train_state["nbr_train_examples"] = nbr_train_examples
+                monitors_data, to_print = train_monitors(net, train_state, monitors_data)
+                # for k,v in res.items():
+                #     monitors_data[k].append((i, stop_time - start_time, v))
                 start_time += time.time() - stop_time
                 # We print statistics
                 if (to_print != ""):
                     to_print = "i : {0: <10}".format(i) + to_print
-                    to_print = "epoch : {0: <5}".format(epoch + 1) + to_print
+                    to_print = "epoch : {0: <5}".format(int((i-1)/len(trainloader))) + to_print
                     to_print = "time : {0: <10}".format(round(time.time() - start_time, 3)) + to_print
                     print(to_print)
         # We save the results, also used for resuming training later
-        resume["_total_running_loss"] = total_running_loss
-        resume["_total_train_error"] = total_train_error
-        resume["_nbr_loss_examples"] = nbr_loss_examples
-        resume["_nbr_train_examples"] = nbr_train_examples
-        resume["epoch"] = start_epoch
-        resume["i"] = i
-        resume["time"] = stop_time - start_time
+        for k in train_state.keys():
+            resume[k] = train_state[k]
+        for k in monitors_data.keys():
+            resume[k] = monitors_data[k]
+        print("\n Total time of the train : {} s".format(round(time.time() - total_time, 3)))
         return resume
     except KeyboardInterrupt:
-        resume["_total_running_loss"] = total_running_loss
-        resume["_total_train_error"] = total_train_error
-        resume["_nbr_loss_examples"] = nbr_loss_examples
-        resume["_nbr_train_examples"] = nbr_train_examples
-        resume["epoch"] = start_epoch
-        resume["i"] = i
-        resume["time"] = stop_time - start_time
+        train_state["i"] = i
+        train_state["epoch"] = int((i-1)/len(trainloader))
+        train_state["time"] = stop_time - start_time
+        train_state["total_running_loss"] = total_running_loss
+        train_state["total_train_error"] = total_train_error
+        train_state["nbr_loss_examples"] = nbr_loss_examples
+        train_state["nbr_train_examples"] = nbr_train_examples
+        for k in train_state.keys():
+            resume[k] = train_state[k]
+        for k in monitors_data.keys():
+            resume[k] = monitors_data[k]
+        print("\n Total time of the train : {} s".format(round(time.time() - total_time, 3)))
         raise
 
 
@@ -262,10 +274,10 @@ class Train_Monitor(object):
         self.name = "base_class"
         self.step=step
 
-    def resume(self, net, args_dict):
+    def resume(self, net, train_state):
         pass
 
-    def __call__(self, net, args_dict=None):
+    def __call__(self, net, train_state=None):
         return None
 
     def plot(self):
@@ -290,19 +302,21 @@ class List_Train_Monitor(object):
     def names(self):
         return [t.name for t in self.train_monitors]
 
-    def resume(self, net, args_dict):
+    def resume(self, net, train_state):
         for t in self.train_monitors:
-            t.resume(net, args_dict)
+            t.resume(net, train_state)
 
-    def __call__(self, net, args_dict):
-        res = {}
+    def __call__(self, net, train_state, monitors_data):
         to_print = ""
         for t in self.train_monitors:
-            if (args_dict["i"] % t.step == 0):
-                r, p = t(net, args_dict)
-                res[t.name] = r
+            if (train_state["i"] % t.step == 0):
+                if isinstance(t, Save_Net):
+                    r, p = t(net, train_state, monitors_data)
+                else:
+                    r, p = t(net, train_state)
+                monitors_data[t.name].append((train_state["i"], train_state["time"], r))
                 to_print += p
-        return res, to_print
+        return monitors_data, to_print
 
 
 
@@ -315,14 +329,14 @@ class Running_Loss(Train_Monitor):
         self.last_nbr_examples = 0
         self.round_x_n = lambda x,n : round(x, -int(floor(log10(abs(x)))) + n - 1)
 
-    def resume(self, net, args_dict):
-        self.last_loss = args_dict["total_running_loss"]
-        self.last_nbr_examples = args_dict["nbr_loss_examples"]
+    def resume(self, net, train_state):
+        self.last_loss = train_state["total_running_loss"]
+        self.last_nbr_examples = train_state["nbr_loss_examples"]
 
-    def __call__(self, net, args_dict):
-        running_loss = (args_dict["total_running_loss"] - self.last_loss)
-        running_loss *= 1./(args_dict["nbr_loss_examples"] - self.last_nbr_examples)
-        self.resume(net, args_dict)
+    def __call__(self, net, train_state):
+        running_loss = (train_state["total_running_loss"] - self.last_loss)
+        running_loss *= 1./(train_state["nbr_loss_examples"] - self.last_nbr_examples)
+        self.resume(net, train_state)
         to_print = "loss = {0: <11}".format(self.round_x_n(running_loss, 6))
         return running_loss, to_print
 
@@ -341,14 +355,14 @@ class Train_Error(Train_Monitor):
         self.last_error = 0
         self.last_nbr_examples = 0
 
-    def resume(self, net, args_dict):
-        self.last_error = args_dict["total_train_error"]
-        self.last_nbr_examples = args_dict["nbr_train_examples"]
+    def resume(self, net, train_state):
+        self.last_error = train_state["total_train_error"]
+        self.last_nbr_examples = train_state["nbr_train_examples"]
 
-    def __call__(self, net, args_dict):
-        train_error = (args_dict["total_train_error"] - self.last_error)
-        train_error *= 100./(args_dict["nbr_train_examples"] - self.last_nbr_examples)
-        self.resume(net, args_dict)
+    def __call__(self, net, train_state):
+        train_error = (train_state["total_train_error"] - self.last_error)
+        train_error *= 100./(train_state["nbr_train_examples"] - self.last_nbr_examples)
+        self.resume(net, train_state)
         to_print = "train_error = {0: <10}".format(round(train_error, 3))
         return train_error, to_print
 
@@ -366,14 +380,14 @@ class Test_Prediction(Train_Monitor):
         self.testloader = testloader
         self.last_i = 0
 
-    def __call__(self, net, args_dict=None, recompute=None):
-        if (args_dict is None):
+    def __call__(self, net, train_state=None, recompute=None):
+        if (train_state is None):
             if recompute or ((self.last_i is not None) and (recompute is None)):
                 self.prediction, self.ground_truth = test_output(net, self.testloader)
                 self.last_i = None
-        elif (args_dict["i"] != self.last_i):
+        elif (train_state["i"] != self.last_i):
             self.prediction, self.ground_truth = test_output(net, self.testloader)
-            self.last_i = args_dict["i"]
+            self.last_i = train_state["i"]
         return (self.prediction, self.ground_truth), ""
 
 
@@ -387,8 +401,8 @@ class Test_Error(Train_Monitor):
         if not isinstance(testloader_or_test_prediction, Test_Prediction):
             self.test_prediction = Test_Prediction(testloader_or_test_prediction, step)
 
-    def __call__(self, net, args_dict=None, recompute=None):
-        res, _ = self.test_prediction(net, args_dict, recompute)
+    def __call__(self, net, train_state=None, recompute=None):
+        res, _ = self.test_prediction(net, train_state, recompute)
         prediction, ground_truth = res
         test_error = prediction_error(prediction, ground_truth, to_print=False)
         to_print = "test_error = {0: <10}".format(round(test_error, 3))
@@ -409,8 +423,8 @@ class Test_Error_Per_Class(Train_Monitor):
         if not isinstance(testloader_or_test_prediction, Test_Prediction):
             self.test_prediction = Test_Prediction(testloader_or_test_prediction, step)
 
-    def __call__(self, net, args_dict=None, recompute=None):
-        res, _ = self.test_prediction(net, args_dict, recompute)
+    def __call__(self, net, train_state=None, recompute=None):
+        res, _ = self.test_prediction(net, train_state, recompute)
         prediction, ground_truth = res
         test_error = prediction_error_per_class(prediction, ground_truth)
         temp = ["{0: <5}".format(round(i, 1)) for i in test_error]
@@ -434,8 +448,8 @@ class Test_False_Positive_Per_Class(Train_Monitor):
         if not isinstance(testloader_or_test_prediction, Test_Prediction):
             self.test_prediction = Test_Prediction(testloader_or_test_prediction, step)
 
-    def __call__(self, net, args_dict=None, recompute=None):
-        res, _ = self.test_prediction(net, args_dict, recompute)
+    def __call__(self, net, train_state=None, recompute=None):
+        res, _ = self.test_prediction(net, train_state, recompute)
         prediction, ground_truth = res
         test_error = prediction_false_positive_per_class(prediction, ground_truth)
         temp = ["{0: <5}".format(round(i, 1)) for i in test_error]
@@ -450,6 +464,35 @@ class Test_False_Positive_Per_Class(Train_Monitor):
 
 
 
+class Save_Net(Train_Monitor):
+
+    def __init__(self, step=None, filename="saved_nets/autosave_net.pth", save_monitors=True):
+        self.name = "net_save"
+        self.step = step
+        self.filename = filename
+        self.save_monitors = save_monitors
+
+    def __call__(self, net, train_state={}, monitors_data={}):
+        to_save = train_state
+        fn = self.filename
+        if ("i" in train_state.keys()) and ("{}" in self.filename):
+            fn = self.filename.format(i)
+        if self.save_monitors:
+            to_save = dict(to_save, **monitors_data)
+        to_save["net"] = net
+        torch.save(to_save, fn)
+        return fn, "net saved"
+
+    
+
+def load_net(filename="saved_nets/autosave_net.pth"):
+    res = torch.load(filename)
+    net = res["net"]
+    del res["net"]
+    return net, res
+
+
+
 class Copy_Net(Train_Monitor):
 
     def __init__(self, step=None):
@@ -457,11 +500,11 @@ class Copy_Net(Train_Monitor):
         self.step = step
         self.net = None
 
-    def resume(self, net, args_dict):
+    def resume(self, net, train_state):
         self.net = copy.deepcopy(net)
 
-    def __call__(self, net, args_dict=None):
-        self.resume(net, args_dict)
+    def __call__(self, net, train_state=None):
+        self.resume(net, train_state)
         return net, ""
         
             
@@ -475,14 +518,14 @@ class Net_Parameters_Change(Train_Monitor):
         if not isinstance(self.net, Copy_Net):
             self.net = Copy_Net()
 
-    def resume(self, net, args_dict):
-        self.net.resume(net, args_dict)
+    def resume(self, net, train_state):
+        self.net.resume(net, train_state)
 
     def get_weights(self, net, layer_type):
         layers = [(k,j,i) for k,(j,i) in enumerate(net.named_children()) if isinstance(i, layer_type)]
         return [(k,j,i.weight.detach().numpy()) for (k,j,i) in layers]
     
-    def __call__(self, net, args_dict=None):
+    def __call__(self, net, train_state=None):
         conv_weight = self.get_weights(net, M.conv._ConvNd)
         old_conv_weight = self.get_weights(self.net.net, M.conv._ConvNd)
         conv_diff = [(k,j,np.mean(abs(l-i))) for (n,m,l),(k,j,i) in zip(conv_weight, old_conv_weight)]
@@ -491,7 +534,7 @@ class Net_Parameters_Change(Train_Monitor):
         lin_diff = [(k,j,np.mean(abs(l-i))) for (n,m,l),(k,j,i) in zip(lin_weight, old_lin_weight)]
         res = conv_diff + lin_diff
         res.sort()
-        self.resume(net, args_dict)
+        self.resume(net, train_state)
         return res, ""
 
     def plot(self, data, x='i', linecolor='.-'):
@@ -516,7 +559,7 @@ class Show_Conv_Filters(Train_Monitor):
         lay = [(k,j,i) for k,(j,i) in enumerate(net.named_children()) if isinstance(i, M.conv.Conv2d)]
         return [(k,j,i.weight.detach().numpy()) for (k,j,i) in lay]
     
-    def __call__(self, net, args_dict=None):
+    def __call__(self, net, train_state=None):
         conv_weight = copy.deepcopy(self.get_weights(net))
         return conv_weight, ""
 
