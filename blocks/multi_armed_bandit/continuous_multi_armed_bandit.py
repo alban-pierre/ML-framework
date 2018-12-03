@@ -14,7 +14,7 @@ class Continuous_MAB(Base_Input_Block):
     The list of other data stored is in self.other_data
     """
 
-    def __init__(self, arm=NoBlock, policy=None, space=None, n_max=None, time_max=None, reward_func=None, start_time=None, repeat_min=None, inversed=False, reward_array=False, **kargs):
+    def __init__(self, arm=NoBlock, policy=None, space=None, n_max=None, time_max=None, reward_func=None, start_time=None, repeat_min=None, inversed=False, **kargs):
         """
         n_arms : (int) = 1 : the number of arms
         repeat_max : (int) = -1 : stops when one arm is pulled more times than repeat_max
@@ -30,7 +30,8 @@ class Continuous_MAB(Base_Input_Block):
             policy = Uniform_Policy()
         self.set_params(reward_func=reward_func, repeat_min=repeat_min, inversed=inversed)
         self.set_params(policy=policy, space=space, n_max=n_max, time_max=time_max)
-        self.set_params(reward_array=reward_array, start_time=start_time, **kargs)
+        self.set_params(start_time=start_time, **kargs)
+        # self.set_params(reward_array=reward_array, start_time=start_time, **kargs)
 
     def set_params(self, **kargs):
         changed = False
@@ -44,6 +45,7 @@ class Continuous_MAB(Base_Input_Block):
     def _set_param(self, k, v):
         if (k == "policy"):
             self.policy = v
+            self.policy.set_params(mab=self)
             return False
         elif (k == "space"):
             self.space = v
@@ -85,9 +87,9 @@ class Continuous_MAB(Base_Input_Block):
         elif (k == "inverse") or (k == "inversed"):
             self.inversed = v
             return False
-        elif (k == "reward_array"):
-            self.reward_array = v
-            return False
+        # elif (k == "reward_array"):
+        #     self.reward_array = v
+        #     return False
         else:
             if (k[:4] == "arms"):
                 k = "input" + k[4:]
@@ -112,8 +114,8 @@ class Continuous_MAB(Base_Input_Block):
             return self.reward_func
         elif (k == "repeat_min"):
             return self.repeat_min
-        elif (k == "reward_array"):
-            return self.reward_array
+        # elif (k == "reward_array"):
+        #     return self.reward_array
         else:
             res = self.policy._get_param(k)
             if res is NoParam:
@@ -139,7 +141,8 @@ class Continuous_MAB(Base_Input_Block):
         self.n = 0
         self.list_rewards = {}
         self.mean_rewards = {}
-        self.array_rewards = []
+        self.array_rewards = np.asarray([])
+        self._array_rewards = np.asarray([])
         if self.reward_func is None:
             self.raw_rewards = self.list_rewards
         else:
@@ -175,7 +178,7 @@ class Continuous_MAB(Base_Input_Block):
         While the function update_reward is not used (or skip_arm), it returns the same index
         """
         if (len(self.list_next) == 0):
-            res = self.policy(self)
+            res = self.policy()
             if isinstance(res, list):
                 if self.repeat_min is None:
                     self.list_next = res
@@ -210,22 +213,33 @@ class Continuous_MAB(Base_Input_Block):
             if not self.list_rewards.has_key(i_arm):
                 self.list_rewards[i_arm] = []
             self.list_rewards[i_arm].append(reward)
-            self.mean_rewards[i_arm] = np.mean(self.list_rewards[i_arm])
-            if self.reward_array:
-                self.array_rewards.append(list(i_arm) + [self.list_rewards[i_arm][-1]])
         else:
             if not self.list_rewards.has_key(i_arm):
                 self.raw_rewards[i_arm] = []
                 self.list_rewards[i_arm] = []
             self.raw_rewards[i_arm].append(reward)
             self.list_rewards[i_arm].append(self.reward_func(reward))
-            self.mean_rewards[i_arm] = np.mean(self.list_rewards[i_arm])
-            if self.reward_array:
-                self.array_rewards.append(list(i_arm) + [self.list_rewards[i_arm][-1]])
+        self.mean_rewards[i_arm] = np.mean(self.list_rewards[i_arm])
+        # if self.reward_array:
+        #     self.array_rewards.append(list(i_arm) + [self.list_rewards[i_arm][-1]])
+        sh = self.array_rewards.shape
+        if (self.array_rewards.shape[0] == self._array_rewards.shape[0]):
+            if (sh[0] == 0):
+                self._array_rewards = np.asarray(list(i_arm) + [self.list_rewards[i_arm][-1]])
+                self._array_rewards = self._array_rewards[np.newaxis,:]
+                self.array_rewards = self._array_rewards
+            else:
+                self._array_rewards = np.concatenate([self._array_rewards, np.zeros(sh)])
+                self._array_rewards[sh[0],:] = list(i_arm) + [self.list_rewards[i_arm][-1]]
+                self.array_rewards = self._array_rewards[:sh[0]+1,:]
+        else:
+            self._array_rewards[sh[0],:] = list(i_arm) + [self.list_rewards[i_arm][-1]]
+            self.array_rewards = self._array_rewards[:sh[0]+1,:]
         if (self.min_reward is None) or (self.min_reward > self.list_rewards[i_arm][-1]):
             self.min_reward = self.list_rewards[i_arm][-1]
         if (self.max_reward is None) or (self.max_reward < self.list_rewards[i_arm][-1]):
             self.max_reward = self.list_rewards[i_arm][-1]
+        self.policy.update_reward(i_arm, self.list_rewards[i_arm][-1])
 
     def pull(self):
         """

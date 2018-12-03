@@ -36,12 +36,12 @@ except NameError:
 
 
 
-def get_name(inst):
-    """
-    Get shorter name of a class from its __str__ method
-    """
-    s = str(inst)
-    return s.split()[0].split('.')[-1]
+# def get_name(inst):
+#     """
+#     Get shorter name of a class from its __str__ method
+#     """
+#     s = str(inst)
+#     return s.split()[0].split('.')[-1]
 
 
 class Base_Block(object):
@@ -89,7 +89,7 @@ class Base_Id_Block(Base_Block):
         return obj
 
     def __init__(self):
-        self.name = get_name(self)
+        self.name = self.__class__.__name__ # get_name(self)
         self._ct = 2
 
     def __copy__(self):
@@ -271,18 +271,32 @@ class Base_Start_Block(Base_Id_Block):
         print("Warning : could not set attribute {} for block {}".format(k, self.name))
         return False
 
-    def get_params(self, *args):
+    def get_params(self, *args, **kargs):
         if args:
-            return {k:self._get_param(k) for k in args}# if k in self.params_names}
+            res = (self._get_param(k) for k in args)
+            if kargs.has_key("as_dict") and kargs["as_dict"]:
+                return {k:v for k,v in zip(args, res)}
+            else:
+                res = tuple(res)
+                return (res[0] if (len(res) == 1) else res)
         else:
             return {k:self._get_param(k) for k in self.params_names}
-        return False
 
     def _get_param(self, k):
         if (k == "name"):
             return self.name
         return NoParam
 
+    def __getattr__(self, k):
+        if (k[:4] == "set_"):
+            return (lambda v : self.set_params(**{k[4:]:v}))
+        elif (k[:4] == "get_"):
+            return (lambda : self.get_params(k[4:]))
+        else:
+            # return getattr(super(Base_Start_Block, self), k)
+            cls_name = self.__class__.__name__
+            raise AttributeError("'{}' object has no attribute '{}'".format(cls_name, k))
+        
     def _init_changed(self):
         self._changed_here_train = True
         self._changed_here_test = True
@@ -461,12 +475,16 @@ class Base_Input_Block(Base_Id_Block):
         print("Warning : could not set attribute {} for block {}".format(k, self.name))
         return False
 
-    def get_params(self, *args):
+    def get_params(self, *args, **kargs):
         if args:
-            return {k:self._get_param(k) for k in args}# if k in self.params_names}
+            res = (self._get_param(k) for k in args)
+            if kargs.has_key("as_dict") and kargs["as_dict"]:
+                return {k:v for k,v in zip(args, res)}
+            else:
+                res = tuple(res)
+                return (res[0] if (len(res) == 1) else res)
         else:
             return {k:self._get_param(k) for k in self.params_names}
-        return False
 
     def _get_param(self, k):
         if (k[:5] == "input"):
@@ -475,6 +493,16 @@ class Base_Input_Block(Base_Id_Block):
             return self.name
         return NoParam
 
+    def __getattr__(self, k):
+        if (k[:4] == "set_"):
+            return (lambda v : self.set_params(**{k[4:]:v}))
+        elif (k[:4] == "get_"):
+            return (lambda : self.get_params(k[4:]))
+        else:
+            # return getattr(super(Base_Start_Block, self), k)
+            cls_name = self.__class__.__name__
+            raise AttributeError("'{}' object has no attribute '{}'".format(cls_name, k))
+        
     def _init_changed(self):
         self._changed_here_train = True
         self._changed_here_test = True
@@ -513,19 +541,13 @@ class Base_Input_Block(Base_Id_Block):
         self._update_changed_call()
 
     def changed_train(self):
-        if self._changed_here_train:
-            return True
-        return self.changed_input_train()
+        return self._changed_here_train or self.changed_input_train()
 
     def changed_test(self):
-        if self._changed_here_test:
-            return True
-        return self.changed_input_test()
+        return self._changed_here_test or self.changed_input_test()
 
     def changed_call(self):
-        if self._changed_here_call:
-            return True
-        return self.changed_input_call()
+        return self._changed_here_call or self.changed_input_call()
 
     def changed(self):
         if self._changed_here_call or self._changed_here_test or self._changed_here_train:
@@ -727,7 +749,7 @@ class Base_Inputs_Block(Base_Id_Block):
         if (input_block is NoParam):
             self.input_block = []
         elif args:
-            self.input_block = [input_block] + args
+            self.input_block = [input_block] + list(args)
         elif not isinstance(input_block, list):
             self.input_block = [input_block]
         elif any([isinstance(i, Base_Block) for i in input_block]):
@@ -796,16 +818,20 @@ class Base_Inputs_Block(Base_Id_Block):
         print("Warning : could not set attribute {} for block {}".format(k, self.name))
         return False
 
-    def get_params(self, *args):
+    def get_params(self, *args, **kargs):
         if args:
-            return {k:self._get_param(k) for k in args if k in self.params_names}
+            res = (self._get_param(k) for k in args)
+            if kargs.has_key("as_dict") and kargs["as_dict"]:
+                return {k:v for k,v in zip(args, res)}
+            else:
+                res = tuple(res)
+                return (res[0] if (len(res) == 1) else res)
         else:
             return {k:self._get_param(k) for k in self.params_names}
-        return False
 
     def _get_param(self, k):
         if (k[:5] == "input"):
-            if (k == "input"):
+            if (k == "input") or (k == "input_block"):
                 return self.input_block
             else:
                 i = int(k[6:])
@@ -814,6 +840,16 @@ class Base_Inputs_Block(Base_Id_Block):
             return self.name
         return NoParam
 
+    def __getattr__(self, k):
+        if (k[:4] == "set_"):
+            return (lambda v : self.set_params(**{k[4:]:v}))
+        elif (k[:4] == "get_"):
+            return (lambda : self.get_params(k[4:]))
+        else:
+            # return getattr(super(Base_Start_Block, self), k)
+            cls_name = self.__class__.__name__
+            raise AttributeError("'{}' object has no attribute '{}'".format(cls_name, k))
+        
     def _init_changed(self):
         self._changed_here_train = True
         self._changed_here_test = True
@@ -1023,7 +1059,7 @@ class Transparent_Block(Base_Block):
     """    
     def __init__(self, input_block=NoBlock, **kargs):
         self.params_names = {"input", "name_"}
-        self.name_ = get_name(self)
+        self.name_ = self.__class__.__name__ # get_name(self)
         self.input_block = input_block
         self._input_block = _Input_Block_For_Class_Transparent_Block(self)
         if kargs:
@@ -1038,22 +1074,28 @@ class Transparent_Block(Base_Block):
     def _set_param(self, k, v):
         if (k == "name_"):
             self.name_ = v
-            return True
+            # return True
         elif (k[:5] == "input"):
             self.input_block = v
-            return True
-        elif isinstance(self.input_block, Base_Block) and self.input_block._set_param(k, v):
-            return True
+            # return True
+        elif isinstance(self.input_block, Base_Block):
+            self.input_block.set_params(**{k:v})
+            # elif isinstance(self.input_block, Base_Block) and self.input_block._set_param(k, v):
+            # return True
         else:
             print("Warning : could not set attribute {} for block {}".format(k, self.name))
-            return False
+            # return False
 
-    def get_params(self, *args):
+    def get_params(self, *args, **kargs):
         if args:
-            return {k:self._get_param(k) for k in args}
+            res = (self._get_param(k) for k in args)
+            if kargs.has_key("as_dict") and kargs["as_dict"]:
+                return {k:v for k,v in zip(args, res)}
+            else:
+                res = tuple(res)
+                return (res[0] if (len(res) == 1) else res)
         else:
             return {k:self._get_param(k) for k in self.params_names}
-        return False
 
     def _get_param(self, k):
         if (k[:5] == "input"):
@@ -1063,20 +1105,30 @@ class Transparent_Block(Base_Block):
         else:
             return self.input_block._get_param(k)
 
-    def __getattribute__(self, attr):
+    # def __getattribute__(self, attr):
+    #     if (attr[:3] == "_id"):
+    #         if isinstance(self.input_block, Base_Block):
+    #             return self.input_block.__getattribute__(attr)
+    #         else:
+    #             return 2
+    #     else:
+    #         return super(Transparent_Block, self).__getattribute__(attr)
+        
+    def __getattr__(self, attr):
         if (attr[:3] == "_id"):
             if isinstance(self.input_block, Base_Block):
                 return self.input_block.__getattribute__(attr)
             else:
                 return 2
-        else:
-            return super(Transparent_Block, self).__getattribute__(attr)
-
-    def __getattr__(self, attr):
-        if self.__dict__.has_key(attr) or (attr == "input_block"):
+        if (attr[:4] == "set_"):
+            return (lambda v : self.set_params(**{attr[4:]:v}))
+        elif (attr[:4] == "get_"):
+            return (lambda : self.get_params(attr[4:]))
+        elif self.__dict__.has_key(attr) or (attr == "input_block"):
             return self.__dict__[attr]
         elif isinstance(self.input_block, Base_Block):
-            return getattr(self.input_block, attr)
+            return self.input_block.__getattribute__(attr)
+            # return getattr(self.input_block, attr)
         elif (attr[:6] == "output"):
             return self.input_block
         else:

@@ -171,12 +171,12 @@ class TStudent(Kernel):
     """
 
     def __init__(self, degree=2):
-        self._d = degree
+        self._degree = degree
 
     def _compute(self, data_1, data_2):
 
         dists = np.sqrt(euclidean_dist_matrix(data_1, data_2))
-        return 1 / (1 + dists ** self._d)
+        return 1 / (1 + dists ** self._degree)
 
     def dim(self):
         return None

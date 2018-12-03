@@ -46,6 +46,7 @@ class Multi_Armed_Bandit(Base_Inputs_Block):
     def _set_param(self, k, v):
         if (k == "policy"):
             self.policy = v
+            self.policy.set_params(mab=self)
             return False
         elif (k == "repeat_max"):
             if (v > 0) or (v is None):
@@ -178,7 +179,7 @@ class Multi_Armed_Bandit(Base_Inputs_Block):
         While the function update_reward is not used (or skip_arm), it returns the same index
         """
         if (len(self.list_next) == 0):
-            res = self.policy(self)
+            res = self.policy()
             if isinstance(res, list):
                 if self.repeat_min is None:
                     self.list_next = res
@@ -220,6 +221,7 @@ class Multi_Armed_Bandit(Base_Inputs_Block):
             self.min_reward = self.list_rewards[i_arm][-1]
         if (self.max_reward is None) or (self.max_reward < self.list_rewards[i_arm][-1]):
             self.max_reward = self.list_rewards[i_arm][-1]
+        self.policy.update_reward(i_arm, self.list_rewards[i_arm][-1])
 
     def pull(self):
         """

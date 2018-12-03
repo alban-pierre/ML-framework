@@ -74,12 +74,12 @@ class Select_Block(Base_Inputs_Block):
         self.index = index
         self.set_params(index=index, **kargs)
 
-    def set_params(self, *args, **kargs):
-        changed = False
-        for k,v in kargs.iteritems():
-            changed = self._set_param(k, v) or changed
-        if changed:
-            self.set_changed_here(True)
+    # def set_params(self, *args, **kargs):
+    #     changed = False
+    #     for k,v in kargs.iteritems():
+    #         changed = self._set_param(k, v) or changed
+    #     if changed:
+    #         self.set_changed_here(True)
 
     def _set_param(self, k, v):
         if (k == "index") or (k == "i"):
@@ -120,15 +120,15 @@ class Select_Block(Base_Inputs_Block):
         else:
             return super(Select_Block, self).changed(val)
 
-    def __getattr__(self, attr):
-        if self.__dict__.has_key(attr) or (attr == "index") or (attr == "input_block"):
-            return self.__dict__[attr]
-        elif isinstance(self.input_block, Base_Block):
-            return getattr(self.input_block, attr)
-        elif (attr[:6] == "output"):
-            return self.input_block
-        else:
-            raise AttributeError("Transparent Block could not find attribute {}".format(attr))
+    # def __getattr__(self, attr):
+    #     if self.__dict__.has_key(attr) or (attr == "index") or (attr == "input_block"):
+    #         return self.__dict__[attr]
+    #     elif isinstance(self.input_block, Base_Block):
+    #         return getattr(self.input_block, attr)
+    #     elif (attr[:6] == "output"):
+    #         return self.input_block
+    #     else:
+    #         raise AttributeError("Transparent Block could not find attribute {}".format(attr))
 
     def compute(self):
         return self._input_block_[self.index]()

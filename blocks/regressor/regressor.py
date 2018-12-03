@@ -156,6 +156,11 @@ class Kernel_Regressor(Regressor):
                 self.kernel = type(self.kernel)(**{k[8:]:v})
                 return True
             return False
+        elif (k[:5] == "ker__"):
+            if (self.kernel is not None) and not isinstance(self.kernel, str):
+                self.kernel = type(self.kernel)(**{k[5:]:v})
+                return True
+            return False
         else:
             return super(Kernel_Regressor, self)._set_param(k, v)
 
@@ -164,6 +169,8 @@ class Kernel_Regressor(Regressor):
             return self.kernel
         elif (k[:8] == "kernel__"):
             return getattr(self.kernel, k[7:])
+        elif (k[:5] == "ker__"):
+            return getattr(self.kernel, k[4:])
         else:
             return super(Kernel_Regressor, self)._get_param(k)
 
@@ -344,13 +351,31 @@ class Gaussian_Average_Estimator(Base_Input_Block):
 
 
 
+def gaussian_average_knn_estimator_distance(distance, y_train, k=10, slf=Empty_Class()):
+    # x1, y1 = data_train
+    # if data_test is None:
+    #     x2, y2 = data_train
+    # else:
+    #     x2, y2 = data_test
+    # slf.distance = asymmetric_distance_l2(x2, x1)
+    slf.sorted_distance = np.sort(distance)
+    slf.std_sq = np.mean(slf.sorted_distance[:,:k], axis=1)
+    slf.weights = np.exp(-distance/(2.*slf.std_sq)[:,np.newaxis])
+    slf.sum_weights = np.sum(slf.weights, axis=1)
+    slf.coeffs = slf.weights/slf.sum_weights[:,np.newaxis]
+    result = np.dot(slf.coeffs, y_train)
+    return result
+
+
+    
 def gaussian_average_knn_estimator(data_train, data_test=None, k=10, slf=Empty_Class()):
     x1, y1 = data_train
     if data_test is None:
         x2, y2 = data_train
     else:
         x2, y2 = data_test
-    slf.distance = asymmetric_distance_l2(x2, x1)
+    # slf.distance = asymmetric_distance_l2(x2, x1)
+    slf.distance = asymmetric_distance_l2(x2, x1, squared=True)
     slf.sorted_distance = np.sort(slf.distance)
     slf.std_sq = np.mean(slf.sorted_distance[:,:k], axis=1)
     slf.weights = np.exp(-slf.distance/(2.*slf.std_sq)[:,np.newaxis])
@@ -387,31 +412,200 @@ class Gaussian_Average_KNN_Estimator(Base_Input_Block):
             return super(Gaussian_Average_KNN_Estimator, self)._get_param(k)
 
     def _train(self):
-        x, y = self._input_block.train()
-        # self.distance = Symetric_Distance_L2(x)()
-        self.distance = symmetric_distance_l2(x)
-        # self.distance = np.concatenate([self.distance, 2*self.distance])
-        self.sorted_distance = np.sort(self.distance)
-        self.std_sq = np.mean(self.sorted_distance[:,:self.k], axis=1)
-        self.weights = np.exp(-self.distance/(2.*self.std_sq)[:,np.newaxis])
-        self.sum_weights = np.sum(self.weights, axis=1)
-        self.coeffs = self.weights/self.sum_weights[:,np.newaxis]
-        result = np.dot(self.coeffs, y)
-        return result
+        tr = self._input_block.train()
+        return gaussian_average_knn_estimator(tr, self.k, self)
+        # x, y = self._input_block.train()
+        # # self.distance = Symetric_Distance_L2(x)()
+        # self.distance = symmetric_distance_l2(x)
+        # # self.distance = np.concatenate([self.distance, 2*self.distance])
+        # self.sorted_distance = np.sort(self.distance)
+        # self.std_sq = np.mean(self.sorted_distance[:,:self.k], axis=1)
+        # self.weights = np.exp(-self.distance/(2.*self.std_sq)[:,np.newaxis])
+        # self.sum_weights = np.sum(self.weights, axis=1)
+        # self.coeffs = self.weights/self.sum_weights[:,np.newaxis]
+        # result = np.dot(self.coeffs, y)
+        # return result
         
     def _test(self):
-        x1, y1 = self._input_block.train()
-        x2, y2 = self._input_block.test()
-        # self.distance = l2_dist(x2,x1)#Asymetric_Distance_L2(x1, x2)()
-        # self.distance = np.concatenate([self.distance, 2*self.distance])
-        self.distance = asymmetric_distance_l2(x2, x1)
-        self.sorted_distance = np.sort(self.distance)
-        self.std_sq = np.mean(self.sorted_distance[:,:self.k], axis=1)
-        self.weights = np.exp(-self.distance/(2.*self.std_sq)[:,np.newaxis])
-        self.sum_weights = np.sum(self.weights, axis=1)
-        self.coeffs = self.weights/self.sum_weights[:,np.newaxis]
-        result = np.dot(self.coeffs, y1)
-        return result
+        tr = self._input_block.train()
+        te = self._input_block.test()
+        return gaussian_average_knn_estimator(tr, te, self.k, self)
+        # x1, y1 = self._input_block.train()
+        # x2, y2 = self._input_block.test()
+        # # self.distance = l2_dist(x2,x1)#Asymetric_Distance_L2(x1, x2)()
+        # # self.distance = np.concatenate([self.distance, 2*self.distance])
+        # self.distance = asymmetric_distance_l2(x2, x1)
+        # self.sorted_distance = np.sort(self.distance)
+        # self.std_sq = np.mean(self.sorted_distance[:,:self.k], axis=1)
+        # self.weights = np.exp(-self.distance/(2.*self.std_sq)[:,np.newaxis])
+        # self.sum_weights = np.sum(self.weights, axis=1)
+        # self.coeffs = self.weights/self.sum_weights[:,np.newaxis]
+        # result = np.dot(self.coeffs, y1)
+        # return result
         
     def _call(self):
         return self.test()
+
+
+
+def gaussian_average_max_knn_estimator(data_train, data_test=None, k=10, slf=Empty_Class()):
+    x1, y1 = data_train
+    if data_test is None:
+        x2, y2 = data_train
+    else:
+        x2, y2 = data_test
+    # slf.distance = asymmetric_distance_l2(x2, x1)
+    slf.distance = asymmetric_distance_l2(x2, x1, squared=True)
+    slf.sorted_distance = np.sort(slf.distance)
+    slf.std_sq = np.min(np.mean(slf.sorted_distance[:,:k], axis=1))
+    slf.weights = np.exp(-slf.distance/(2.*slf.std_sq))
+    slf.sum_weights = np.sum(slf.weights, axis=1)
+    slf.coeffs = slf.weights/slf.sum_weights[:,np.newaxis]
+    result = np.dot(slf.coeffs, y1)
+    return result
+
+
+    
+class Gaussian_Average_Max_KNN_Estimator(Base_Input_Block):
+
+    def __init__(self, input_block=NoBlock, k=10, **kargs):
+        super(Gaussian_Average_Max_KNN_Estimator, self).__init__(input_block)
+        self.params_names = self.params_names.union({"k"})
+        self.k = 10
+        self.set_params(k=k, **kargs)
+
+    def _set_param(self, k, v):
+        if (k == "k"):
+            if (self.k != v):
+                self.k = v
+                return True
+            return False
+        else:
+            if (k == "dataset"):
+                k = "input"
+            return super(Gaussian_Average_Max_KNN_Estimator, self)._set_param(k, v)
+
+    def _get_param(self, k):
+        if (k == "std"):
+            return self.std
+        else:
+            return super(Gaussian_Average_Max_KNN_Estimator, self)._get_param(k)
+
+    def _train(self):
+        tr = self._input_block.train()
+        return gaussian_average_max_knn_estimator(tr, self.k, self)
+        # x, y = self._input_block.train()
+        # # self.distance = Symetric_Distance_L2(x)()
+        # self.distance = symmetric_distance_l2(x)
+        # # self.distance = np.concatenate([self.distance, 2*self.distance])
+        # self.sorted_distance = np.sort(self.distance)
+        # self.std_sq = np.mean(self.sorted_distance[:,:self.k], axis=1)
+        # self.weights = np.exp(-self.distance/(2.*self.std_sq)[:,np.newaxis])
+        # self.sum_weights = np.sum(self.weights, axis=1)
+        # self.coeffs = self.weights/self.sum_weights[:,np.newaxis]
+        # result = np.dot(self.coeffs, y)
+        # return result
+        
+    def _test(self):
+        tr = self._input_block.train()
+        te = self._input_block.test()
+        return gaussian_average_max_knn_estimator(tr, te, self.k, self)
+        # x1, y1 = self._input_block.train()
+        # x2, y2 = self._input_block.test()
+        # # self.distance = l2_dist(x2,x1)#Asymetric_Distance_L2(x1, x2)()
+        # # self.distance = np.concatenate([self.distance, 2*self.distance])
+        # self.distance = asymmetric_distance_l2(x2, x1)
+        # self.sorted_distance = np.sort(self.distance)
+        # self.std_sq = np.mean(self.sorted_distance[:,:self.k], axis=1)
+        # self.weights = np.exp(-self.distance/(2.*self.std_sq)[:,np.newaxis])
+        # self.sum_weights = np.sum(self.weights, axis=1)
+        # self.coeffs = self.weights/self.sum_weights[:,np.newaxis]
+        # result = np.dot(self.coeffs, y1)
+        # return result
+        
+    def _call(self):
+        return self.test()
+
+
+
+
+
+def gaussian_average_median_knn_estimator(data_train, data_test=None, k=10, slf=Empty_Class()):
+    x1, y1 = data_train
+    if data_test is None:
+        x2, y2 = data_train
+    else:
+        x2, y2 = data_test
+    # slf.distance = asymmetric_distance_l2(x2, x1)
+    slf.distance = asymmetric_distance_l2(x2, x1, squared=True)
+    slf.sorted_distance = np.sort(slf.distance)
+    slf.std_sq = np.sort(np.mean(slf.sorted_distance[:,:k], axis=1))[slf.distance.shape[0]/8]
+    slf.weights = np.exp(-slf.distance/(2.*slf.std_sq))
+    slf.sum_weights = np.sum(slf.weights, axis=1)
+    slf.coeffs = slf.weights/slf.sum_weights[:,np.newaxis]
+    result = np.dot(slf.coeffs, y1)
+    return result
+
+
+    
+class Gaussian_Average_Median_KNN_Estimator(Base_Input_Block):
+
+    def __init__(self, input_block=NoBlock, k=10, **kargs):
+        super(Gaussian_Average_Median_KNN_Estimator, self).__init__(input_block)
+        self.params_names = self.params_names.union({"k"})
+        self.k = 10
+        self.set_params(k=k, **kargs)
+
+    def _set_param(self, k, v):
+        if (k == "k"):
+            if (self.k != v):
+                self.k = v
+                return True
+            return False
+        else:
+            if (k == "dataset"):
+                k = "input"
+            return super(Gaussian_Average_Median_KNN_Estimator, self)._set_param(k, v)
+
+    def _get_param(self, k):
+        if (k == "std"):
+            return self.std
+        else:
+            return super(Gaussian_Average_Median_KNN_Estimator, self)._get_param(k)
+
+    def _train(self):
+        tr = self._input_block.train()
+        return gaussian_average_max_knn_estimator(tr, self.k, self)
+        # x, y = self._input_block.train()
+        # # self.distance = Symetric_Distance_L2(x)()
+        # self.distance = symmetric_distance_l2(x)
+        # # self.distance = np.concatenate([self.distance, 2*self.distance])
+        # self.sorted_distance = np.sort(self.distance)
+        # self.std_sq = np.mean(self.sorted_distance[:,:self.k], axis=1)
+        # self.weights = np.exp(-self.distance/(2.*self.std_sq)[:,np.newaxis])
+        # self.sum_weights = np.sum(self.weights, axis=1)
+        # self.coeffs = self.weights/self.sum_weights[:,np.newaxis]
+        # result = np.dot(self.coeffs, y)
+        # return result
+        
+    def _test(self):
+        tr = self._input_block.train()
+        te = self._input_block.test()
+        return gaussian_average_max_knn_estimator(tr, te, self.k, self)
+        # x1, y1 = self._input_block.train()
+        # x2, y2 = self._input_block.test()
+        # # self.distance = l2_dist(x2,x1)#Asymetric_Distance_L2(x1, x2)()
+        # # self.distance = np.concatenate([self.distance, 2*self.distance])
+        # self.distance = asymmetric_distance_l2(x2, x1)
+        # self.sorted_distance = np.sort(self.distance)
+        # self.std_sq = np.mean(self.sorted_distance[:,:self.k], axis=1)
+        # self.weights = np.exp(-self.distance/(2.*self.std_sq)[:,np.newaxis])
+        # self.sum_weights = np.sum(self.weights, axis=1)
+        # self.coeffs = self.weights/self.sum_weights[:,np.newaxis]
+        # result = np.dot(self.coeffs, y1)
+        # return result
+        
+    def _call(self):
+        return self.test()
+
+

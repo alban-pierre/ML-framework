@@ -99,7 +99,9 @@ verbose = Verbose(custom, func=verbose_func)
 force = Force_Compute(verbose)
 
 def incrementer():
-    select.set_params(index=select.get_params("index")["index"]+1)
+    select.set_params(index=select.get_params("index")+1)
+    # select.set_params(index=select.get_index()+1)
+    # select.set_params(index=select.get_params("index")["index"]+1)
 func_after = Run_Function_After(force, func=incrementer)
 
 rescale()

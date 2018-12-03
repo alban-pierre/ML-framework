@@ -11,19 +11,134 @@ from regressor.includes import *
 from error_measure.prediction_error import *
 from utils.decorators import *
 from multi_armed_bandit.multi_armed_bandit import *
-# from multi_armed_bandit.continuous_multi_armed_bandit import *
+from multi_armed_bandit.continuous_multi_armed_bandit import *
 from multi_armed_bandit.policy import *
-# from multi_armed_bandit.continuous_policy import *
+from multi_armed_bandit.continuous_policy import *
 
 from processing.scale import *
+from plot.grid import *
 
-
+#all_regressors_params[SVR] = []
 
 data = Sklearn_Dataset("boston")
+r_data = Split_Dataset(data, test_size=0.1, seed=None)
+rescale_ps = Scaler_xy(r_data)
+
+regs = []
+reg_params = []
+ker_params = []
+for reg in all_regressors:
+    le = len(all_regressors_params[reg])
+    if reg().get_params().has_key("kernel"):
+        for ker in all_kernels:
+            lee = le + len(all_kernels_params[ker])
+            if (lee <= 2) and (lee > 0) and (reg != SVR):
+                reg_params.append(all_regressors_params[reg])
+                ker_params.append(all_kernels_params[ker])
+                if isinstance(ker, str):
+                    regs.append(Kernel_Regressor(rescale_ps, regressor=reg, kernel=ker))
+                else:
+                    regs.append(Kernel_Regressor(rescale_ps, regressor=reg, kernel=ker()))
+    else:
+        if (le <= 2) and (le > 0):
+            reg_params.append(all_regressors_params[reg])
+            ker_params.append([])
+            regs.append(Regressor(rescale_ps, regressor=reg))
+
+
+regs_parameters_default = []
+regs_parameters_found = []
+for i_r, reg in enumerate(regs):
+    regs_parameters_default.append([])
+    regs_parameters_found.append([])
+    exc = Ignore_Exception(reg, exception=[ValueError, TypeError], default_value=None)
+    timeout = Timeout(exc, seconds=1, default_value=None)
+    if timeout() is None:
+        continue
+    
+    targets_ps = Select_Target(rescale_ps)
+    error_ps = Prediction_Error_L2(reg, targets_ps)
+
+    force_ps = Force_Compute(error_ps)
+
+    def incrementer_ps():
+        seed = r_data.get_params("seed")
+        if seed is None:
+            r_data.set_params(seed=None)
+        else:
+            r_data.set_params(seed=seed+1)
+    
+    func_after_ps = Run_Function_After(force_ps, func=incrementer_ps)
+
+    policy = Gaussian_UCB_3_Continuous_Policy()
+    policy.set_params(exploit_explore=0.5, knn_coeff=1.)
+
+    regs_parameters_default[i_r] += [("reg__"+r, reg.get_params("reg__"+r)) for r in reg_params[i_r]]
+    regs_parameters_default[i_r] += [("ker__"+k, reg.get_params("ker__"+k)) for k in ker_params[i_r]]
+    space = [((reg, r[0]), r[1], 2., True) for r in regs_parameters_default[i_r]]
+    
+    r_f = lambda x:x[1]
+    rep_min = 1
+    # space = [((reg, "reg__"alpha"), default_alpha, 2., True),
+    #          ((reg, "kernel__gamma"), default_gamma, 2., True)]
+
+    mab = Continuous_MAB(arm=func_after_ps, policy=policy, space=space, n_max=10000, time_max=3., reward_func=r_f, repeat_min=rep_min)
+
+
+    timeout = Timeout(mab, seconds=5, default_value=None)
+    try:
+        timeout()
+    except ValueError:
+        continue
+    except:
+        raise
+
+    if (mab.array_rewards.shape[0] <= 1):
+        continue
+    
+    if (len(mab.space) == 1):
+        grd = grid(mab.array_rewards[:,:-1], n_parts=1000, log=True, return_log=True)
+    else:
+        grd = grid(mab.array_rewards[:,:-1], n_parts=100, log=True, return_log=True)
+    
+    est = mab.policy.estimator_test(points=grd, points_lg=True)
+    min_point = np.exp(grd[np.argmin(est),:])
+
+    regs_parameters_found[i_r] += [("reg__"+r, m) for r,m in zip(reg_params[i_r], min_point)]
+    le = len(reg_params[i_r])
+    regs_parameters_found[i_r] += [("ker__"+r, m) for r,m in zip(ker_params[i_r], min_point[le:])]
+
+    print round(float(i_r)/len(regs),2), mab.array_rewards.shape[0], regs_parameters_default[i_r], regs_parameters_found[i_r]
+
+    
+
+
+
+
+
+        
+
+###########################
+import time
+time.sleep(20)
+###########################
+
+
+
 n_data = Split_Dataset_N_Parts(data, n_parts=10, seed=0)
 tt_data = Join_Dataset_N_Parts(n_data, index=0)
 rescale = Scaler_xy(tt_data)
 
+
+# regs = [r for r,p in zip(regs, regs_parameters_found) if p]
+
+rregs = []
+for r,p in zip(regs, regs_parameters_found):
+    if p:
+        rregs.append(r)
+        r.set_params(input_0=rescale, name=r.name + " PS", **{i:j for i,j in p})
+
+regs = rregs
 # Compute several regressions, the complete list is in regressor.includes.all_regressors
 # regs = [Regressor(rescale, Ridge, regressor_kargs={"alpha":1.}),
 #         Regressor(rescale, LinearRegression),
@@ -32,7 +147,7 @@ rescale = Scaler_xy(tt_data)
 #         Regressor(rescale, SVR(C=1.)),
 #         Kernel_Regressor(rescale, SVR, kernel=RBF()),
 #         Kernel_Regressor(rescale, KernelRidge, kernel=RBF(gamma=None))]
-regs = []
+#regs = []
 for reg in all_regressors:
     if reg().get_params().has_key("kernel"):
         for ker in all_kernels:
